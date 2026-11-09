@@ -30,7 +30,27 @@ REQUIRED_SECTIONS = [ "## When to activate" ].freeze
 # The repository name may carry a language prefix ("ruby-…") so a multi-language skills account stays
 # grouped in the repository list. The skill's own `name` stays unprefixed, because that is what an
 # installer keys on and what a reader sees in their skills folder.
-def allowed_directories(skill) = [ skill, "ruby-#{skill}" ]
+#
+# A clone lands in a directory named after the repository, but a reader may clone into any folder name
+# and a tool may check out into a temporary one — so the remote is consulted too, and matching either
+# one is enough.
+def repository_name
+  url = %x(git -C "#{ROOT}" remote get-url origin 2>/dev/null).strip
+  return nil if url.empty?
+
+  File.basename(url, ".git")
+end
+
+def accepted_names(skill) = [ skill, "ruby-#{skill}" ]
+
+def name_matches?(skill)
+  accepted = accepted_names(skill)
+  return true if accepted.include?(DIRECTORY)
+
+  remote = repository_name
+  remote ? accepted.include?(remote) : false
+end
+
 
 
 # Where the scripts were copied from. SK-6 is skipped when the sibling checkout is absent, so this
@@ -58,8 +78,8 @@ else
   name = front[/^name:\s*(.+)$/, 1].to_s.strip
   description = front[/^description:\s*(.+)$/, 1].to_s.strip
 
-  unless allowed_directories(name).include?(DIRECTORY)
-    violations << "SKILL.md:1: frontmatter name is #{name.inspect}; the directory is #{DIRECTORY.inspect}, expected #{name.inspect} or ruby-#{name}"
+  unless name_matches?(name)
+    violations << "SKILL.md:1: frontmatter name is #{name.inspect}; this checkout is #{DIRECTORY.inspect} with remote #{repository_name.inspect}, which matches neither #{name.inspect} nor ruby-#{name}"
   end
 
   if description.length < DESCRIPTION_RANGE.min
