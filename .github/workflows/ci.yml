@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      # SK-6 (vendored-script drift) needs the source app checked out next to this repository, so it is
+      # skipped here and enforced locally by whoever maintains the pack.
+      - name: Validate the skill
+        run: ./bin/check-skill

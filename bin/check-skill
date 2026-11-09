@@ -1,0 +1,136 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Enforces the single-skill repository contract. Every rule exists because a published skill that is
+# wrong once is wrong for everyone who installs it:
+#
+#   SK-1  frontmatter `name` matches the repository directory, and `description` is long enough to be
+#         routed on (agents match on the description, not on the body)
+#   SK-2  SKILL.md stays a router, not a manual: <= MAX_LINES, and it declares its activation
+#   SK-3  every relative link in SKILL.md resolves to a file that exists
+#   SK-4  every file under references/ or assets/ is linked from SKILL.md — an unreferenced file is dead
+#         weight the agent will never read
+#   SK-5  everything under scripts/ is executable, because it is meant to be run, not read
+#   SK-6  a vendored script matches the app it was copied from, byte for byte, when that app is checked
+#         out next to this repository. Drift here silently teaches the wrong rules.
+#   SK-7  no author-specific absolute paths, no placeholder markers, no unfilled template braces — in
+#         SKILL.md or in any reference
+#
+# Exit 0 when clean, 1 when any violation is found.
+
+require "digest"
+
+ROOT = File.expand_path("..", __dir__)
+NAME = File.basename(ROOT)
+SKILL_MD = File.join(ROOT, "SKILL.md")
+MAX_LINES = 250
+DESCRIPTION_RANGE = (40..1024)
+REQUIRED_SECTIONS = [ "## When to activate" ].freeze
+
+# Where the scripts were copied from. SK-6 is skipped when the sibling checkout is absent, so this
+# repository can be validated on its own in CI.
+SOURCE_APP = ENV.fetch("SOURCE_APP", File.expand_path("../../support-app", ROOT))
+VENDORED = {
+  "scripts/check-ui-components" => "bin/check-ui-components",
+  "scripts/check-theme" => "bin/check-theme"
+}.freeze
+
+violations = []
+
+unless File.exist?(SKILL_MD)
+  puts "SKILL.md:1: missing SKILL.md"
+  exit 1
+end
+
+body = File.read(SKILL_MD)
+
+# SK-1 frontmatter
+front = body[/\A---\n(.*?)\n---\n/m, 1]
+if front.nil?
+  violations << "SKILL.md:1: no YAML frontmatter"
+else
+  name = front[/^name:\s*(.+)$/, 1].to_s.strip
+  description = front[/^description:\s*(.+)$/, 1].to_s.strip
+
+  violations << "SKILL.md:1: frontmatter name is #{name.inspect}, expected #{NAME.inspect}" if name != NAME
+
+  if description.length < DESCRIPTION_RANGE.min
+    violations << "SKILL.md:1: description too short to route on (#{description.length} chars)"
+  elsif description.length > DESCRIPTION_RANGE.max
+    violations << "SKILL.md:1: description exceeds #{DESCRIPTION_RANGE.max} chars"
+  end
+end
+
+# SK-2 the router rule
+line_count = body.lines.size
+violations << "SKILL.md:1: #{line_count} lines; move depth into references/ (max #{MAX_LINES})" if line_count > MAX_LINES
+
+REQUIRED_SECTIONS.each do |section|
+  violations << "SKILL.md:1: missing `#{section}` section" unless body.include?(section)
+end
+
+# SK-3 links resolve
+links = body.scan(/\]\(([^)#][^)]*)\)/).flatten
+            .reject { |link| link.start_with?("http://", "https://", "mailto:") }
+
+links.each do |link|
+  target = File.join(ROOT, link)
+  violations << "SKILL.md:1: broken link `#{link}`" unless File.exist?(target)
+end
+
+# SK-4 no orphaned reference or asset
+Dir.glob([ File.join(ROOT, "references/**/*"), File.join(ROOT, "assets/**/*") ])
+   .select { |path| File.file?(path) }
+   .sort
+   .each do |path|
+  short = path.delete_prefix("#{ROOT}/")
+  next if links.any? { |link| link.delete_prefix("./") == short }
+  next if body.include?(short)
+
+  violations << "#{short}:1: not linked from SKILL.md; delete it or reference it"
+end
+
+# SK-5 scripts are runnable
+Dir.glob(File.join(ROOT, "scripts/*")).select { |path| File.file?(path) }.sort.each do |path|
+  short = path.delete_prefix("#{ROOT}/")
+  violations << "#{short}:1: not executable; chmod +x it" unless File.executable?(path)
+end
+
+# SK-7 no placeholders, no author-specific paths — every published markdown file
+markdown = [ SKILL_MD, *Dir.glob(File.join(ROOT, "references/**/*.md")) ]
+markdown.sort.each do |path|
+  short = path.delete_prefix("#{ROOT}/")
+
+  File.readlines(path).each_with_index do |line, index|
+    if line.match?(%r{/Users/[^/\s]+|/home/[^/\s]+})
+      violations << "#{short}:#{index + 1}: absolute author path; use a repository-relative path"
+    end
+    if line.match?(/\b(TODO|TBD|FIXME)\b/) || line.match?(/\{\{[^}]*\}\}/)
+      violations << "#{short}:#{index + 1}: placeholder left in a published skill"
+    end
+  end
+end
+
+# SK-6 vendored drift, only when the source app is present
+if File.directory?(SOURCE_APP)
+  VENDORED.each do |vendored, original|
+    copy = File.join(ROOT, vendored)
+    source = File.join(SOURCE_APP, original)
+
+    next unless File.exist?(copy) && File.exist?(source)
+    next if Digest::SHA256.hexdigest(File.read(copy)) == Digest::SHA256.hexdigest(File.read(source))
+
+    violations << "#{vendored}:1: drifted from #{original}; re-copy the app's version"
+  end
+else
+  puts "check-skill: #{SOURCE_APP} not found, skipping the vendored-drift check"
+end
+
+if violations.empty?
+  puts "check-skill: #{NAME}, 0 violations"
+  exit 0
+end
+
+violations.sort.each { |violation| puts violation }
+puts "check-skill: #{NAME}, #{violations.size} violations"
+exit 1
