@@ -14,7 +14,7 @@ Version `2.0.0` tracks the source constitution.
   "version": 1,
   "skills": {
     "guarded-status-workflow": {
-      "source": "mahardikalgw/guarded-status-workflow",
+      "source": "mahardikalgw/ruby-guarded-status-workflow",
       "sourceType": "github",
       "skillPath": "SKILL.md"
     }
@@ -25,8 +25,8 @@ Version `2.0.0` tracks the source constitution.
 Or clone and symlink:
 
 ```bash
-git clone git@github.com:mahardikalgw/guarded-status-workflow.git
-ln -s "$PWD/guarded-status-workflow" .claude/skills/guarded-status-workflow
+git clone git@github.com:mahardikalgw/ruby-guarded-status-workflow.git
+ln -s "$PWD/ruby-guarded-status-workflow" .claude/skills/guarded-status-workflow
 ```
 
 ## When to activate
@@ -40,10 +40,11 @@ ln -s "$PWD/guarded-status-workflow" .claude/skills/guarded-status-workflow
 ## What's inside
 
 ```
-guarded-status-workflow/
+ruby-guarded-status-workflow/
   SKILL.md
   assets/transition_error.rb
   assets/transition_status.rb
+  bin/check-skill
   references/transition-matrix.md
 ```
 
@@ -62,8 +63,8 @@ repository — that vendored scripts still match it byte for byte. Runs in CI on
 
 ## Related skills
 
-- [`scoped-authorization`](https://github.com/mahardikalgw/scoped-authorization) — scopes, 404-not-403, explicit public opt-outs, isolation by construction
-- [`inertia-test-harness`](https://github.com/mahardikalgw/inertia-test-harness) — minitest + inertia helpers, builder objects, and system tests that do not flake
+- [`scoped-authorization`](https://github.com/mahardikalgw/ruby-scoped-authorization) — scopes, 404-not-403, explicit public opt-outs, isolation by construction
+- [`inertia-test-harness`](https://github.com/mahardikalgw/ruby-inertia-test-harness) — minitest + inertia helpers, builder objects, and system tests that do not flake
 
 ## Licence
 

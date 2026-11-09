@@ -21,11 +21,17 @@
 require "digest"
 
 ROOT = File.expand_path("..", __dir__)
-NAME = File.basename(ROOT)
+DIRECTORY = File.basename(ROOT)
 SKILL_MD = File.join(ROOT, "SKILL.md")
 MAX_LINES = 250
 DESCRIPTION_RANGE = (40..1024)
 REQUIRED_SECTIONS = [ "## When to activate" ].freeze
+
+# The repository name may carry a language prefix ("ruby-…") so a multi-language skills account stays
+# grouped in the repository list. The skill's own `name` stays unprefixed, because that is what an
+# installer keys on and what a reader sees in their skills folder.
+def allowed_directories(skill) = [ skill, "ruby-#{skill}" ]
+
 
 # Where the scripts were copied from. SK-6 is skipped when the sibling checkout is absent, so this
 # repository can be validated on its own in CI.
@@ -52,7 +58,9 @@ else
   name = front[/^name:\s*(.+)$/, 1].to_s.strip
   description = front[/^description:\s*(.+)$/, 1].to_s.strip
 
-  violations << "SKILL.md:1: frontmatter name is #{name.inspect}, expected #{NAME.inspect}" if name != NAME
+  unless allowed_directories(name).include?(DIRECTORY)
+    violations << "SKILL.md:1: frontmatter name is #{name.inspect}; the directory is #{DIRECTORY.inspect}, expected #{name.inspect} or ruby-#{name}"
+  end
 
   if description.length < DESCRIPTION_RANGE.min
     violations << "SKILL.md:1: description too short to route on (#{description.length} chars)"
@@ -127,10 +135,10 @@ else
 end
 
 if violations.empty?
-  puts "check-skill: #{NAME}, 0 violations"
+  puts "check-skill: #{DIRECTORY}, 0 violations"
   exit 0
 end
 
 violations.sort.each { |violation| puts violation }
-puts "check-skill: #{NAME}, #{violations.size} violations"
+puts "check-skill: #{DIRECTORY}, #{violations.size} violations"
 exit 1
